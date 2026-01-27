@@ -8,7 +8,7 @@
 
 ## "Refresh" Protocol
 When user says "refresh":
-1. `cd ~/Desktop && LATEST=$(ls -dt 01-27-* 2>/dev/null | head -1) && cd "$LATEST" || { echo "No repo found"; exit 1; }`
+1. `cd ~/Desktop && LATEST=$(ls -dt 01-27-STABLE-LATEST-* 2>/dev/null | head -1) && cd "$LATEST" || { echo "No STABLE folder found"; exit 1; }`
 2. `git pull`
 3. `node qa/qa_gate.js`
 4. If QA passes + changes exist → `git add . && git commit -m "Auto-save: QA passed" && git push && echo "✅ SUCCESS: Changes pushed to GitHub" || echo "❌ FAILED: Push unsuccessful"`
