@@ -13,7 +13,8 @@ When user says "refresh":
 3. `node qa/qa_gate.js`
 4. If QA passes + changes exist → `git add . && git commit -m "Auto-save: QA passed" && git push`
 5. If QA fails → `git checkout v4.6-stable`
-6. Regenerate this instruction block from CLAUDE.md + repo state
+6. If push succeeds → `cd ~/Desktop && git clone https://github.com/elliot-backbone/01-27.git "01-27-STABLE-LATEST-$(date +%Y%m%d-%H%M%S)"`
+7. Regenerate this instruction block from CLAUDE.md + repo state
 
 ---
 
