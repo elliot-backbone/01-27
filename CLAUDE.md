@@ -8,11 +8,12 @@
 
 ## "Refresh" Protocol
 When user says "refresh":
-1. `git pull`
-2. `node qa/qa_gate.js`
-3. If QA passes + changes exist → `git add . && git commit -m "Auto-save: QA passed" && git push`
-4. If QA fails → `git checkout v4.6-stable`
-5. Regenerate this instruction block from CLAUDE.md + repo state
+1. `cd ~/Desktop && LATEST=$(ls -dt 01-27-* 2>/dev/null | head -1) && cd "$LATEST" || { echo "No repo found"; exit 1; }`
+2. `git pull`
+3. `node qa/qa_gate.js`
+4. If QA passes + changes exist → `git add . && git commit -m "Auto-save: QA passed" && git push`
+5. If QA fails → `git checkout v4.6-stable`
+6. Regenerate this instruction block from CLAUDE.md + repo state
 
 ---
 
