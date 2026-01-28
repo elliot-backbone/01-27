@@ -1,100 +1,81 @@
-# Backbone V9 — Reference
+# CLAUDE.md — Backbone V9
+> Last: 2026-01-21 | Stable: `backbone-v9-phase0-2026-01-21.zip` | Tests: 11/11 ✓
 
-**Repo:** https://github.com/elliot-backbone/01-27  
-**Phase:** 4.6 CERTIFIED
+## Session Protocol
 
----
+### START (Every Session)
+1. `unzip -o /mnt/user-data/uploads/backbone-v9-*.zip -d /home/claude/`
+2. `node --experimental-vm-modules tests/unit/derive.test.js`
+3. Read this CLAUDE.md
+4. Check memory_user_edits for context
 
-## Architecture Layers
-```
-L0  /raw       Raw entities + validation
-L1  /derive    Pure deterministic derivations
-L3  /predict   Issues, trajectories, ripple, calibration
-L5  /decide    Action ranking only (single surface)
-L6  /runtime   Orchestration + IO (nothing imports from here)
---  /qa        Canonical QA gate
-```
+### END (Every Session)
+1. Run QA (see Commands below)
+2. Update WIP section with progress
+3. Update Changelog with changes
+4. `zip -r backbone-v9-phaseN-$(date +%Y-%m-%d).zip core data tests CLAUDE.md`
+5. `cp *.zip /mnt/user-data/outputs/`
+6. Update memory_user_edits: version, WIP status
+7. **Export for project**: `cp CLAUDE.md /mnt/user-data/outputs/CLAUDE-backbone.md`
 
----
-
-## Hard Constraints
-1. **No stored derivations** — forbidden.js enforces
-2. **One ranking surface** — `rankScore` only
-3. **DAG execution order** — graph.js enforces
-4. **Files <500 lines** — QA enforces
-5. **Layer imports** — no upward, nothing from /runtime
-
----
-
-## Forbidden Fields in Raw JSON
-```
-runway, health, priority, impact, urgency, risk, score, tier, band,
-label, progressPct, coverage, expectedValue, conversionProb, onTrack,
-projectedDate, velocity, issues, priorities, actions, rippleScore,
-rankScore, rankComponents, trustPenalty, executionFrictionPenalty,
-timeCriticalityBoost, calibratedProbability, introducerPrior,
-pathTypePrior, targetTypePrior, successRate, followupFor, daysSinceSent
-```
-
----
-
-## Ranking Formula
-```
-rankScore = expectedNetImpact - trustPenalty - executionFrictionPenalty + timeCriticalityBoost
-
-expectedNetImpact = (upside × combinedProb) + leverage - (downside × failProb) - effort - timePen
-combinedProb = executionProbability × probabilityOfSuccess
-```
+### PERSIST TO PROJECT
+Upload `/mnt/user-data/outputs/CLAUDE-backbone.md` to "Backbone Dashboard" project knowledge.
+This ensures protocol survives context resets.
 
 ---
 
 ## North Stars
-| # | Constraint |
-|---|------------|
-| NS1 | Actions are the product |
-| NS2 | Optimize for net value creation |
-| NS3 | Truth before intelligence (no stored derivations) |
-| NS4 | Separation of meaning is sacred |
-| NS5 | Architecture enforces doctrine |
-| NS6 | ONE ranking surface |
+1. Priority emission is the point  2. Health=state, Priority=gap  3. Derived>static  
+4. Reactive→Preventative  5. Impact=unlocks  6. Goals=frame  7. "What next?"  
+8. MODULAR: <500 lines/file, layers testable independently
 
----
+## Architecture
+```
+core/
+├── schema/index.js    # Facts-only, validates forbidden fields
+├── derive/
+│   ├── runway.js      # deriveRunway → {value,confidence,explain}
+│   └── health.js      # deriveHealth → GREEN|YELLOW|RED
+└── engine.js          # compute(rawData,now) → {companies[],meta}
+data/sample.json       # 9 companies, 5 team, 9 investors
+tests/unit/derive.test.js
+```
 
-## Terminology
-**Use:** Raw, Derived, Health, Issue, Resolution, Action, Ripple, PreIssue, GoalTrajectory, Impact, Leverage, IntroOutcome, Calibration, Followup, RankScore
+## Commands
+```bash
+# Test
+node --experimental-vm-modules tests/unit/derive.test.js
 
-**Avoid:** Focus, Tier, Generic Score, Expected Value, Conversion Probability, Fear, Urgency Score
+# QA (before zip)
+find core -name "*.js" -exec node --check {} \;
+wc -l core/**/*.js core/*.js | awk '$1>500{print "FAIL:",$2}'
+grep -E '"(health|runway|priority)"' data/sample.json && echo FAIL
 
----
+# Package
+zip -r backbone-v9-phase0-$(date +%Y-%m-%d).zip core data tests CLAUDE.md
+cp *.zip /mnt/user-data/outputs/
+```
 
-## Pre-Ship Litmus
-All YES or don't ship:
-1. Creates or improves Actions?
-2. Optimizes for net value creation?
-3. Preserves raw vs derived truth?
-4. Respects semantic boundaries?
-5. Enforced by architecture/QA?
-6. Uses single ranking surface?
+## Schema Rules
+- FACTS only: cash, burn, goals[], deals[], asOf, provenance
+- NEVER store: health, runway, priority, impact, risk, score
+- Every value: asOf + provenance required
 
----
+## Versioning
+`backbone-v{MAJOR}-{PHASE}-{DATE}.zip`  
+phase0=foundation, phase1=goals, phase2=issues, phase3=priority
 
-## QA Gates (Phase 4.6)
-| Gate | Check |
-|------|-------|
-| 1 | Layer imports respect boundaries |
-| 2 | No stored derivations in raw |
-| 3 | DAG integrity |
-| 4 | Actions have rankScore |
-| 5 | Sorting by rankScore only |
-| 6 | Deterministic ranking |
-| 7 | IntroOutcome schema valid |
-| 8 | Single ranking surface |
-| 9 | Followup deduplication |
-| A | Action events load |
-| B | Action event schema |
-| C | Action event timestamps |
-| D | Unique event IDs |
-| E | Referential integrity |
-| F | No derived keys in events |
-| G | Determinism with events |
-| H | Append-only structure |
+## WIP
+- [ ] Phase 1: Goal trajectories
+- [ ] Phase 2: Issue detection  
+- [ ] Phase 3: Priority computation
+
+## Changelog
+- **v9-phase0 (2026-01-21):** Schema + derive(runway,health) + engine + 11 tests + master protocol
+
+## Memory State
+```
+V9-phase0 stable: 2026-01-21
+Files: core/{schema,derive/{runway,health},engine}.js + data/sample.json + tests/
+Tests: 11/11 pass | Schema: facts-only
+```
