@@ -1,7 +1,7 @@
 /**
- * graph.js Ã¢â‚¬â€ Explicit DAG Definition (Patch 2)
+ * graph.js – Explicit DAG Definition (Phase 4.5.2)
  * 
- * Execution order is enforced by an explicit dependency graph, not convention.
+ * Execution order is enforced by explicit dependency graph, not convention.
  * 
  * INVARIANT: No circular dependencies. Architecture enforces doctrine.
  * 
@@ -9,24 +9,21 @@
  */
 
 // =============================================================================
-// COMPUTATION GRAPH (Phase 3.1)
+// COMPUTATION GRAPH (Phase 4.5.2)
 // =============================================================================
 
 /**
- * Dependency graph for Phase 3.2 pipeline.
+ * Dependency graph for Phase 4.5.2 pipeline.
  * Each node lists its dependencies.
  * 
- * Phase 3.2 extends Phase 3.1 with:
- * - metrics: Metric time series view
- * - goalTrajectory: Goal forecast + probability-of-hit
- * - preissues: Forecasted issues (preventative)
- * - actionCandidates: Actions from issues/preissues/goals
- * - actionImpact: Attach impact model to actions
- * - actionRanker: Rank by expected net impact
+ * Phase 4.5.2: Kill list compliance
+ * - REMOVED: valueVector (shadow value surface)
+ * - REMOVED: weeklyValue (shadow value surface)
+ * - SINGLE RANKING SURFACE: actionRanker (via rankScore only)
  * 
  * DAG Order:
- * runway â†’ metrics â†’ trajectory â†’ goalTrajectory â†’ health â†’ issues â†’ 
- * preissues â†’ ripple â†’ actionCandidates â†’ actionImpact â†’ actionRanker
+ * runway → metrics → trajectory → goalTrajectory → health → issues → 
+ * preissues → ripple → actionCandidates → actionImpact → actionRanker
  */
 export const GRAPH = {
   // L1: Base derivations (no deps)
@@ -60,17 +57,11 @@ export const GRAPH = {
   // L10: Action impact (attach impact model, use ripple for leverage)
   actionImpact: ['actionCandidates', 'ripple'],
   
-  // L11: Value vector (8-dimension value model)
-  valueVector: ['actionImpact'],
+  // L11: Action ranker (rank by rankScore - single surface)
+  actionRanker: ['actionImpact'],
   
-  // L12: Action ranker (rank by value density)
-  actionRanker: ['valueVector'],
-  
-  // L13: Weekly value surface ("One Move That Matters")
-  weeklyValue: ['actionRanker'],
-  
-  // L14: Priority view (compatibility layer over ranked actions)
-  priority: ['actionRanker', 'weeklyValue']
+  // L12: Priority view (compatibility layer over ranked actions)
+  priority: ['actionRanker']
 };
 
 // =============================================================================

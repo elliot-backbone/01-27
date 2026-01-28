@@ -1,7 +1,7 @@
 /**
- * engine.js ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â DAG-Driven Computation Engine (Phase 3.2)
+ * engine.js – DAG-Driven Computation Engine (Phase 4.5.2)
  * 
- * Phase 3.2: Actions are the primary artifact.
+ * Phase 4.5.2: Kill list compliance - removed shadow value surfaces
  * Execution order is enforced by explicit dependency graph.
  * 
  * INVARIANT: No circular dependencies. Back-edge access throws.
@@ -26,8 +26,6 @@ import { deriveCompanyPreIssues } from '../predict/preissues.js';
 import { generateCompanyActionCandidates } from '../predict/actionCandidates.js';
 import { attachCompanyImpactModels } from '../predict/actionImpact.js';
 import { generateIntroOpportunities } from '../predict/introOpportunity.js';
-import { computeValueVector } from '../predict/valueVector.js';
-import { generateCompanyWeeklyValue } from '../predict/weeklyValue.js';
 
 // DECIDE layer (L5)
 import { rankActions } from '../decide/ranking.js';
@@ -36,7 +34,7 @@ import { rankActions } from '../decide/ranking.js';
 import { assertNoForbiddenFields } from '../qa/forbidden.js';
 
 // =============================================================================
-// NODE COMPUTE FUNCTIONS (Phase 3.2)
+// NODE COMPUTE FUNCTIONS (Phase 4.5.2)
 // =============================================================================
 
 const NODE_COMPUTE = {
@@ -146,29 +144,9 @@ const NODE_COMPUTE = {
   },
   
   actionRanker: (ctx, company, now) => {
-    // PHASE 4.5.1: Use canonical ranking surface only
-    // Import from decide/ranking.js is handled at top of file
-    const withValueVector = ctx.valueVector || [];
-    return rankActions(withValueVector);
-  },
-  
-  valueVector: (ctx, company, now) => {
-    // Attach value vectors to actions with impact models
+    // PHASE 4.5.2: Direct ranking from actionImpact (no intermediate value surfaces)
     const actionsWithImpact = ctx.actionImpact || [];
-    return actionsWithImpact.map(action => {
-      const goal = (company.goals || []).find(g => 
-        action.sources?.[0]?.goalId === g.id
-      );
-      return {
-        ...action,
-        valueVector: computeValueVector(action, { goal, company, now })
-      };
-    });
-  },
-  
-  weeklyValue: (ctx, company, now) => {
-    const actionsWithVectors = ctx.valueVector || [];
-    return generateCompanyWeeklyValue(company, actionsWithVectors, { now });
+    return rankActions(actionsWithImpact);
   },
   
   priority: (ctx, company, now) => {
@@ -180,7 +158,7 @@ const NODE_COMPUTE = {
         companyName: company.name,
         resolutionId: a.resolutionId,
         title: a.title,
-        priority: a.expectedNetImpact,
+        priority: a.rankScore || a.expectedNetImpact,
         rank: a.rank,
         actionId: a.actionId,
         sourceType: a.sources[0]?.sourceType || 'MANUAL'
@@ -215,7 +193,7 @@ function computeCompanyDAG(company, now, globals = {}) {
 
 /**
  * Run the full computation engine.
- * Phase 3.2: Returns ranked actions as primary artifact.
+ * Phase 4.5.2: Returns ranked actions as primary artifact.
  */
 export function compute(rawData, now = new Date()) {
   const startTime = Date.now();
@@ -273,8 +251,7 @@ export function compute(rawData, now = new Date()) {
         preissues: computed.preissues,
         ripple: computed.ripple,
         introOpportunities: computed.introOpportunity,
-        actions: computed.valueVector, // Phase 3.3: actions with value vectors
-        weeklyValue: computed.weeklyValue,
+        actions: computed.actionRanker, // Phase 4.5.2: direct from ranker
         priorities: computed.priority?.priorities || []
       }
     };
@@ -300,7 +277,8 @@ export function compute(rawData, now = new Date()) {
   const actionSourceCounts = {
     ISSUE: portfolioRankedActions.filter(a => a.sources[0]?.sourceType === 'ISSUE').length,
     PREISSUE: portfolioRankedActions.filter(a => a.sources[0]?.sourceType === 'PREISSUE').length,
-    GOAL: portfolioRankedActions.filter(a => a.sources[0]?.sourceType === 'GOAL').length
+    GOAL: portfolioRankedActions.filter(a => a.sources[0]?.sourceType === 'GOAL').length,
+    INTRODUCTION: portfolioRankedActions.filter(a => a.sources[0]?.sourceType === 'INTRODUCTION').length
   };
   
   return {
@@ -308,7 +286,7 @@ export function compute(rawData, now = new Date()) {
     team: rawData.team || [],
     investors: rawData.investors || [],
     
-    // Phase 3.2: Actions are primary artifact
+    // Phase 4.5.2: Actions are primary artifact
     actions: portfolioRankedActions,
     todayActions: portfolioRankedActions.slice(0, 5),
     
@@ -318,7 +296,7 @@ export function compute(rawData, now = new Date()) {
       companyName: a.title.split(':')[0],
       resolutionId: a.resolutionId,
       title: a.title,
-      priority: a.expectedNetImpact,
+      priority: a.rankScore || a.expectedNetImpact,
       rank: a.rank,
       actionId: a.actionId
     })),
@@ -326,7 +304,7 @@ export function compute(rawData, now = new Date()) {
     meta: {
       computedAt: now.toISOString(),
       durationMs: Date.now() - startTime,
-      version: '9.3.0', // Phase 3.3: Value Generation
+      version: '9.4.5.2', // Phase 4.5.2: Kill list compliance
       inputVersion: rawData.version,
       errors,
       warnings,
