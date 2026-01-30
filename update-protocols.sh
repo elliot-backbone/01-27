@@ -1,3 +1,6 @@
+#!/bin/bash
+
+cat > .backbone/protocols.js << 'PROTOCOLEOF'
 #!/usr/bin/env node
 
 /**
@@ -324,3 +327,7 @@ Examples:
   showProtocolMenu();
   process.exit(1);
 }
+PROTOCOLEOF
+
+chmod +x .backbone/protocols.js
+echo "✅ Updated protocols.js with status and qa commands"
