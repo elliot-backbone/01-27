@@ -1,0 +1,14 @@
+{
+  "name": "backbone-api",
+  "version": "1.0.0",
+  "description": "Backbone V9 Backend API Server",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
