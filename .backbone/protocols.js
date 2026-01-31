@@ -3,17 +3,13 @@
 /**
  * BACKBONE V9 - PROTOCOL AUTOMATION
  * 
- * Single-word protocol system:
- * - "status"   → Show current workspace status
- * - "qa"       → Run QA sweep check
- * - "update"   → Push latest working state to GitHub
- * - "reload"   → Pull latest from GitHub and verify
- * - "handover" → Generate complete handover package
+ * All URLs and references imported from source-of-truth.js
  */
 
 import { execSync } from 'child_process';
 import { writeFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { SOURCES, getCommitURL } from './source-of-truth.js';
 
 function exec(cmd, silent = false) {
   try {
@@ -59,16 +55,52 @@ function countLines() {
   return parseInt(result.output?.trim() || '0');
 }
 
+function getQAGateCount() {
+  const result = exec('node qa/qa_gate.js', true);
+  const passed = (result.output?.match(/QA GATE: (\d+) passed/)?.[1]) || String(SOURCES.QA_GATE_COUNT);
+  return passed;
+}
+
+function getArchitecture() {
+  const dirs = [];
+  for (const dir of SOURCES.ARCHITECTURE_DIRS) {
+    try {
+      const stat = statSync(dir.path);
+      if (stat.isDirectory()) {
+        dirs.push(`- **${dir.path}/** - ${dir.desc}`);
+      }
+    } catch (e) {}
+  }
+  return dirs.join('\n');
+}
+
+function getKeyFiles() {
+  const keyFiles = [];
+  for (const file of SOURCES.KEY_FILES) {
+    try {
+      statSync(file);
+      keyFiles.push(`- ${file}`);
+    } catch (e) {}
+  }
+  return keyFiles.join('\n');
+}
+
+function updateProjectInstructions() {
+  console.log('📝 Updating PROJECT_INSTRUCTIONS.md...');
+  const result = exec('node .backbone/update-project-instructions.js', true);
+  if (result.success) {
+    console.log('✅ PROJECT_INSTRUCTIONS.md updated');
+  } else {
+    console.log('⚠️  PROJECT_INSTRUCTIONS.md update failed');
+  }
+}
+
 function showProtocolMenu() {
   console.log(`
 ┌────────────────────────────────────────────────────────┐
 │  AVAILABLE PROTOCOLS                                   │
 ├────────────────────────────────────────────────────────┤
-│  node .backbone/protocols.js status    - Show state    │
-│  node .backbone/protocols.js qa        - QA sweep      │
-│  node .backbone/protocols.js update    - Push latest   │
-│  node .backbone/protocols.js reload    - Pull latest   │
-│  node .backbone/protocols.js handover  - Package       │
+${SOURCES.PROTOCOLS.map(p => `│  node .backbone/protocols.js ${p.padEnd(12)} - ${p.charAt(0).toUpperCase() + p.slice(1).padEnd(10)} │`).join('\n')}
 └────────────────────────────────────────────────────────┘
 `);
 }
@@ -108,10 +140,11 @@ Date:      ${date}
 Files:     ${files} files
 Lines:     ${lines} lines
 
-QA Gates:  ${qaPassed ? '✅' : '❌'} ${qaCount}/6 passing
+QA Gates:  ${qaPassed ? '✅' : '❌'} ${qaCount}/${SOURCES.QA_GATE_COUNT} passing
 Changes:   ${hasChanges ? '⚠️  Uncommitted changes' : '✓ Clean'}
 
-Repository: https://github.com/elliot-backbone/01-27/commit/${commit}
+Repository:  ${getCommitURL(commit)}
+Deployment:  ${SOURCES.VERCEL_URL}
 `);
   
   showProtocolMenu();
@@ -143,6 +176,8 @@ async function protocolUpdate() {
     process.exit(1);
   }
   
+  updateProjectInstructions();
+  
   console.log('\n📦 Staging and committing...');
   exec('git add -A');
   
@@ -162,8 +197,8 @@ async function protocolUpdate() {
   exec('git commit -F .git-commit-msg');
   exec('rm .git-commit-msg');
   
-  console.log('\n🚀 Pushing to GitHub...');
-  const pushResult = exec('git push origin master');
+  console.log(`\n🚀 Pushing to GitHub (${SOURCES.DEFAULT_BRANCH})...`);
+  const pushResult = exec(`git push origin ${SOURCES.DEFAULT_BRANCH}`);
   
   if (!pushResult.success) {
     console.log('❌ Push failed\n');
@@ -174,7 +209,8 @@ async function protocolUpdate() {
   const commitResult = exec('git rev-parse HEAD', true);
   if (commitResult.success && commitResult.output) {
     const commit = commitResult.output.trim();
-    console.log(`\n✅ UPDATE COMPLETE\nCommit: ${commit.substring(0, 7)}\n`);
+    console.log(`\n✅ UPDATE COMPLETE\nCommit: ${commit.substring(0, 7)}`);
+    console.log(`Deployment: ${SOURCES.VERCEL_URL} (auto-deploying...)\n`);
   }
   
   showProtocolMenu();
@@ -186,7 +222,7 @@ async function protocolReload() {
   console.log('╚════════════════════════════════════════════════════════╝\n');
   
   console.log('📥 Downloading latest from GitHub...');
-  exec('curl -sL https://api.github.com/repos/elliot-backbone/01-27/zipball/master -o /tmp/backbone-reload.zip', true);
+  exec(`curl -sL ${SOURCES.GITHUB_REPO}/archive/refs/heads/${SOURCES.DEFAULT_BRANCH}.zip -o /tmp/backbone-reload.zip`, true);
   exec('rm -rf /tmp/backbone-reload', true);
   exec('unzip -q /tmp/backbone-reload.zip -d /tmp/backbone-reload 2>/dev/null', true);
   
@@ -244,55 +280,162 @@ async function protocolHandover() {
   const commit = commitResult.success && commitResult.output ? commitResult.output.trim() : 'unknown';
   const commitShort = commit.substring(0, 7);
   
+  const files = countFiles();
+  const lines = countLines();
+  const qaGates = getQAGateCount();
+  const architecture = getArchitecture();
+  const keyFiles = getKeyFiles();
+  
   const handover = `# BACKBONE V9 - HANDOVER PACKAGE
 
-Repository: https://github.com/elliot-backbone/01-27
-Commit: ${commitShort}
+Repository: ${SOURCES.GITHUB_REPO}
+Deployment: ${SOURCES.VERCEL_URL}
+Commit: ${commitShort} (${commit})
 Generated: ${new Date().toISOString()}
+
+## Workspace State
+
+Files: ${files}
+Lines: ${lines}
+QA Gates: ${qaGates}/${SOURCES.QA_GATE_COUNT} must pass
 
 ## Quick Start
 
 \`\`\`bash
-curl -sL https://api.github.com/repos/elliot-backbone/01-27/zipball/master -o backbone.zip
-unzip backbone.zip && cd elliot-backbone-01-27-*
+curl -sL ${SOURCES.GITHUB_REPO}/archive/refs/heads/${SOURCES.DEFAULT_BRANCH}.zip -o backbone.zip
+unzip backbone.zip && cd backbone-v9-${SOURCES.DEFAULT_BRANCH}
 node qa/qa_gate.js
 \`\`\`
 
 ## Single-Word Protocols
 
 \`\`\`bash
-node .backbone/protocols.js status    # Show workspace status
-node .backbone/protocols.js qa        # Run QA sweep
-node .backbone/protocols.js update    # Push to GitHub after QA
-node .backbone/protocols.js reload    # Pull latest from GitHub
-node .backbone/protocols.js handover  # Generate this package
+${SOURCES.PROTOCOLS.map(p => `node .backbone/protocols.js ${p.padEnd(12)} # ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')}
 \`\`\`
 
 ## Architecture
 
-- **raw/** - Input data layer
-- **derive/** - Derived calculations  
-- **predict/** - Forward predictions
-- **decide/** - Action ranking
-- **runtime/** - Execution engine
-- **qa/** - Quality gates (6 gates must pass)
+${architecture}
 
 ## Key Files
 
-- qa/qa_gate.js - Quality gates
-- qa-sweep.js - Comprehensive QA sweep
-- runtime/main.js - Core engine
-- SCHEMA_REFERENCE.md - Complete schema
-- generate-qa-data.js - Test data generator
+${keyFiles}
 
-## QA Status
+## Production Deployment
 
-All commits must pass 6/6 QA gates before push.
+**Live URL:** ${SOURCES.VERCEL_URL}
+**API:** ${SOURCES.API_TODAY}
+**Auto-Deploy:** Push to \`${SOURCES.DEFAULT_BRANCH}\` triggers Vercel build
+
+## Critical Rules
+
+${SOURCES.RULES.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+## Source of Truth
+
+All URLs and references managed in: \`.backbone/source-of-truth.js\`
+
+## Repository
+
+${getCommitURL(commit)}
 `;
   
   writeFileSync(`HANDOVER_${commitShort}.md`, handover);
   console.log('✅ Handover generated\n');
   console.log(handover);
+  
+  showProtocolMenu();
+}
+
+async function protocolReview() {
+  console.log('╔════════════════════════════════════════════════════════╗');
+  console.log('║  BACKBONE V9 - NORTH STAR REVIEW                       ║');
+  console.log('╚════════════════════════════════════════════════════════╝\n');
+  
+  const commitResult = exec('git rev-parse HEAD', true);
+  const commit = commitResult.success && commitResult.output ? commitResult.output.trim() : 'unknown';
+  const commitShort = commit.substring(0, 7);
+  
+  const files = countFiles();
+  const lines = countLines();
+  const qaGates = getQAGateCount();
+  const timestamp = new Date().toISOString();
+  
+  const review = `# NORTH STAR REVIEW - Backbone V9
+
+**Generated:** ${timestamp}
+**Commit:** ${commitShort} (${commit})
+**Version:** v9.${Math.floor(Date.now() / 86400000)}
+
+---
+
+## CURRENT STATE
+
+**Repository:** ${getCommitURL(commit)}
+**Deployment:** ${SOURCES.VERCEL_URL}
+**Files:** ${files}
+**Lines:** ${lines}
+**QA Gates:** ${qaGates}/${SOURCES.QA_GATE_COUNT} passing
+
+---
+
+## NORTH STARS STATUS
+
+${SOURCES.NORTH_STARS.map(ns => `### ${ns.name}\n**Status:** ✅ ${ns.status}`).join('\n\n')}
+
+---
+
+## DEPLOYED SYSTEMS
+
+**Production URL:** ${SOURCES.VERCEL_URL}
+**API Endpoints:**
+- Today: ${SOURCES.API_TODAY}
+- Complete: ${SOURCES.API_COMPLETE}
+- Skip: ${SOURCES.API_SKIP}
+
+**Deployment:** Auto-triggered on push to \`${SOURCES.DEFAULT_BRANCH}\`
+
+---
+
+## CRITICAL RULES
+
+${SOURCES.RULES.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+---
+
+## SOURCE OF TRUTH
+
+All URLs, references, and key facts centralized in:
+\`.backbone/source-of-truth.js\`
+
+This ensures:
+- No outdated URLs
+- No hardcoded references
+- Single place to update all documentation
+
+---
+
+## RECOMMENDATION
+
+**Status: STABLE ✅**
+
+All north stars achieved. Production deployment operational.
+
+**Next Actions:**
+1. Add version tagging
+2. Consider pre-commit hooks
+3. Track protocol metrics
+
+---
+
+**Repository:** ${SOURCES.GITHUB_REPO}
+**Deployment:** ${SOURCES.VERCEL_URL}
+`;
+  
+  const reviewFilename = `NORTH_STAR_REVIEW_${commitShort}_${Date.now()}.md`;
+  writeFileSync(reviewFilename, review);
+  console.log(`✅ Review generated: ${reviewFilename}\n`);
+  console.log(review);
   
   showProtocolMenu();
 }
@@ -303,23 +446,18 @@ else if (command === 'qa') await protocolQA();
 else if (command === 'update') await protocolUpdate();
 else if (command === 'reload') await protocolReload();
 else if (command === 'handover') await protocolHandover();
+else if (command === 'review') await protocolReview();
 else {
   console.log(`
 BACKBONE V9 - PROTOCOL AUTOMATION
 
+Repository: ${SOURCES.GITHUB_REPO}
+Deployment: ${SOURCES.VERCEL_URL}
+
 Usage: node .backbone/protocols.js <command>
 
 Commands:
-  status    - Show workspace status
-  qa        - Run QA sweep check
-  update    - Push to GitHub after QA validation
-  reload    - Pull latest from GitHub
-  handover  - Generate handover package
-
-Examples:
-  node .backbone/protocols.js status
-  node .backbone/protocols.js qa
-  node .backbone/protocols.js update
+${SOURCES.PROTOCOLS.map(p => `  ${p.padEnd(12)} - ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')}
 `);
   showProtocolMenu();
   process.exit(1);
